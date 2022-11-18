@@ -1054,7 +1054,7 @@ ModbusRTU.prototype.writeFC43 = function(address, deviceIdCode, objectId, next) 
  * Write a Modbus "Encapsulation for RFID" (FC=67) to serial port.
  *
  * @param {number} address the slave unit address.
- * @param {number} command the command to execute.
+ * @param {[number, number]} command the command to execute.
  * @param {Array} array the array of data values for command.
  * @param {Function} next the function to call next.
  */
@@ -1088,7 +1088,8 @@ ModbusRTU.prototype.writeFC43 = function(address, deviceIdCode, objectId, next) 
 
   buf.writeUInt8(address, 0);
   buf.writeUInt8(code, 1);
-  buf.writeUInt16BE(command, 2);
+  buf.writeUInt8(command[0], 2);
+  buf.writeUInt8(command[1], 3);
 
   // copy content of array to buf
   if (Buffer.isBuffer(array)) {
