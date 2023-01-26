@@ -235,21 +235,19 @@ function _readFC43(data, modbus, next) {
  function _readFC67(data, next) {
   // 1 byte modbus id
   // 1 byte for fc (in this case always 67 (0x43))
-  // 2 bytes command
-  // 1 byte error code
   // n bytes data
   // 2 bytes crc
 
-  var length = data.length - 7;
+  var length = data.length - 4;
   var contents = [];
 
   for (var i = 0; i < length; i++) {
-      var reg = data.readUInt8(5 + i);
+      var reg = data.readUInt8(2 + i);
       contents.push(reg);
   }
 
   if (next) {
-    next(null, { "data": contents, "buffer": data.slice(3, 3 + length) });
+    next(null, { "data": contents, "buffer": data.slice(2, 2 + length) });
   }
 }
 
