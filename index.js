@@ -34,6 +34,8 @@ var BAD_ADDRESS_ERRNO = "ECONNREFUSED";
 var TRANSACTION_TIMED_OUT_MESSAGE = "Timed out";
 var TRANSACTION_TIMED_OUT_ERRNO = "ETIMEDOUT";
 
+var RECEIVE_TIMEOUT = 50;
+
 var modbusErrorMessages = [
     "Unknown error",
     "Illegal function (device does not support this read/write function)",
@@ -317,7 +319,6 @@ function _cancelTimeout(timeoutHandle) {
  */
 function _onReceive(data) {
     var modbus = this;
-    var error;
 
     modbusSerialDebug('receive raw buffer', data)
 
@@ -329,6 +330,22 @@ function _onReceive(data) {
         return;
     }
 
+    if (transaction._responseTimeout) {
+        clearTimeout(transaction._responseTimeout);
+        transaction._responseData = Buffer.concat([transaction._responseData, data]);
+    } else {
+        transaction._responseData = data;
+    }
+
+    transaction._responseTimeout = setTimeout(() => {
+        delete transaction._responseTimeout;
+        progressResponse(modbus, transaction._responseData, transaction);
+        delete transaction._responseData;
+    }, RECEIVE_TIMEOUT);
+}
+  
+function progressResponse(modbus, data, transaction) {
+    var error;
     if (transaction.responses) {
         /* Stash what we received */
         transaction.responses.push(Uint8Array.prototype.slice.call(data));
