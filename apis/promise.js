@@ -84,6 +84,7 @@ var addPromiseAPI = function(Modbus) {
     cl.readFileRecords = _convert(cl.writeFC20);
     cl.readDeviceIdentification = _convert(cl.writeFC43);
     cl.execRfidCommand = _convert(cl.writeFC67);
+    cl.sendGenericRequest = _convert(cl.writeFC121);
 };
 
 /**

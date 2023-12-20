@@ -51,6 +51,7 @@ export class ModbusRTU {
   writeRegister(dataAddress: number, value: number): Promise<WriteRegisterResult>;
   writeRegisters(dataAddress: number, values: Array<number> | Buffer): Promise<WriteMultipleResult>; // 16
   execRfidCommand(command: [number, number], values: Array<number> | Buffer): Promise<ReadRegisterResult>;
+  sendGenericRequest(command: number[]): Promise<ReadRegisterResult>;
 
   isOpen: boolean;
 }

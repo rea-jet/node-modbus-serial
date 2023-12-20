@@ -254,6 +254,33 @@ function _readFC43(data, modbus, next) {
 }
 
 /**
+ * Parse the data for a Modbus -
+ * Encapsulation for generic request (FC=121)
+ *
+ * @param {Buffer} data the data buffer to parse.
+ * @param {Function} next the function to call next.
+ */
+function _readFC121(data, next) {
+  // 1 byte modbus id
+  // 1 byte for fc (in this case always 121
+  // 1 byte data length
+  // n bytes data
+  // 2 bytes crc
+
+  var length = data.readUInt8(2);
+  var contents = [];
+
+  for (var i = 0; i < length; i++) {
+      var reg = data.readUInt8(3 + i);
+      contents.push(reg);
+  }
+
+  if (next) {
+    next(null, { "data": contents, "buffer": data.slice(3, 3 + length) });
+  }
+}
+
+/**
  * Wrapper method for writing to a port with timeout. <code><b>[this]</b></code> has the context of ModbusRTU
  * @param {Buffer} buffer The data to send
  * @private
@@ -495,6 +522,10 @@ function progressResponse(modbus, data, transaction) {
         case 67:
             // Encapsulation for RFID
             _readFC67(data, next);
+            break;
+        case 121:
+            // generic request
+            _readFC121(data, next);
             break;
     }
 }
@@ -1113,6 +1144,58 @@ ModbusRTU.prototype.writeFC43 = function(address, deviceIdCode, objectId, next) 
     for (var i = 0; i < dataLength; i++) {
       buf.writeUInt8(array[i], 4 + i);
     }
+  }
+
+  // add crc bytes to buffer
+  buf.writeUInt16LE(crc16(buf.slice(0, -2)), codeLength);
+
+  // write buffer to serial port
+  _writeBufferToPort.call(this, buf, this._port._transactionIdWrite);
+};
+
+/**
+ * Write a Modbus "generic request" (FC=121) (0x79) to serial port.
+ *
+ * @param {number} address the slave unit address.
+ * @param {[...number]} command the command to execute.
+ * @param {void} args - not used in this command.
+ * @param {Function} next the function to call next.
+ */
+ModbusRTU.prototype.writeFC121 = function(address, command, args, next) {
+  // check port is actually open before attempting write
+  if (this.isOpen !== true) {
+      if (next) next(new PortNotOpenError());
+      return;
+  }
+
+  // sanity check
+  if (typeof address === "undefined" || typeof command === "undefined") {
+      if (next) next(new BadAddressError());
+      return;
+  }
+
+  var code = 121;
+
+  // set state variables
+  this._transactions[this._port._transactionIdWrite] = {
+      nextAddress: address,
+      nextCode: code,
+      lengthUnknown: true,
+      next: next
+  };
+
+  var dataLength = command.length;
+
+  var codeLength = 3 + dataLength;
+  var buf = Buffer.alloc(codeLength + 2); // add 2 crc bytes
+
+  buf.writeUInt8(address, 0);
+  buf.writeUInt8(code, 1);
+  buf.writeUInt8(dataLength, 2);
+
+  // copy content of command to buf
+  for (var i = 0; i < dataLength; i++) {
+    buf.writeUInt8(command[i], 3 + i);
   }
 
   // add crc bytes to buffer
