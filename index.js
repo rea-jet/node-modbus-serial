@@ -34,7 +34,11 @@ var BAD_ADDRESS_ERRNO = "ECONNREFUSED";
 var TRANSACTION_TIMED_OUT_MESSAGE = "Timed out";
 var TRANSACTION_TIMED_OUT_ERRNO = "ETIMEDOUT";
 
-var RECEIVE_TIMEOUT = 50;
+/**
+ * timeout is currently required because the timing is random
+ * through tunneling the modbus frames through eth
+ */
+var RECEIVE_TIMEOUT = 5;
 
 var modbusErrorMessages = [
     "Unknown error",
