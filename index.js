@@ -262,11 +262,11 @@ function _writeBufferToPort(buffer, transactionId) {
     if (transaction) {
         transaction._timeoutFired = false;
         transaction._timeoutHandle = _startTimeout(this._timeout, transaction);
+        transaction.responses = [];
 
         // If in debug mode, stash a copy of the request payload
         if (this._debugEnabled) {
             transaction.request = Uint8Array.prototype.slice.call(buffer);
-            transaction.responses = [];
         }
     }
 
@@ -309,17 +309,38 @@ function _cancelTimeout(timeoutHandle) {
     clearTimeout(timeoutHandle);
 }
 
+// check expected length for responses with defined length in responses
+function _isExpectedLengthReachedFC3(data) {
+    return data.length >= 5 + data.readUInt8(2);
+}
+function _isExpectedLengthReachedFC16(data) {
+    return data.length >= 8;
+}
+function _isExpectedLengthReachedFC67(data) {
+    return data.length >= 5 + data.readUInt8(2);
+}
+const _isExpectedLengthReachedMap = {
+    3: _isExpectedLengthReachedFC3,
+    16: _isExpectedLengthReachedFC16,
+    67: _isExpectedLengthReachedFC67
+};
+
+function _isExpectedLengthReached(data) {
+    if (data.length < 3) {
+        return false;
+    }
+    const code = data.readUInt8(1);
+    return _isExpectedLengthReachedMap[code] ? _isExpectedLengthReachedMap[code](data) : true;
+}
 /**
  * Handle incoming data from the Modbus port.
  *
  * @param {Buffer} data The data received
  * @private
  */
-function _onReceive(data) {
+function _onReceive(receivedBuffer) {
     var modbus = this;
     var error;
-
-    modbusSerialDebug('receive raw buffer', data)
 
     // set locale helpers variables
     var transaction = modbus._transactions[modbus._port._transactionIdRead];
@@ -331,8 +352,14 @@ function _onReceive(data) {
 
     if (transaction.responses) {
         /* Stash what we received */
-        transaction.responses.push(Uint8Array.prototype.slice.call(data));
+        transaction.responses.push(Uint8Array.prototype.slice.call(receivedBuffer));
     }
+    
+    // combine all buffers from transaction.responses
+    const data = Buffer.concat(transaction.responses);
+
+    modbusSerialDebug('receive raw buffer', receivedBuffer);
+    modbusSerialDebug('combined raw buffer', data);
 
     /* What do we do next? */
     var next = function(err, res) {
@@ -365,8 +392,11 @@ function _onReceive(data) {
         return;
     }
 
-    /* check incoming data
-     */
+    // check if expected length reached or if we need to collect more data
+    if (!_isExpectedLengthReached(data)) {
+        // dont do anything, wait for more data
+        return;
+    }
 
     /* check minimal length
      */
@@ -377,19 +407,19 @@ function _onReceive(data) {
         return;
     }
 
+    // if crc is OK, read address and function code
+    const address = data.readUInt8(0);
+    const code = data.readUInt8(1);
+    
     /* check message CRC
-     * if CRC is bad raise an error
-     */
+      * if CRC is bad raise an error
+      */
     var crcIn = data.readUInt16LE(data.length - 2);
     if (crcIn !== crc16(data.slice(0, -2))) {
         error = "CRC error";
         next(new Error(error));
         return;
     }
-
-    // if crc is OK, read address and function code
-    var address = data.readUInt8(0);
-    var code = data.readUInt8(1);
 
     /* check for modbus exception
      */
