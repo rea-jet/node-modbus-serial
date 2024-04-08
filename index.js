@@ -252,6 +252,33 @@ function _readFC43(data, modbus, next) {
 }
 
 /**
+ * Parse the data for a Modbus -
+ * Encapsulation for RFID with length (FC=68)
+ *
+ * @param {Buffer} data the data buffer to parse.
+ * @param {Function} next the function to call next.
+ */
+ function _readFC68(data, next) {
+  // 1 byte modbus id
+  // 1 byte for fc (in this case always 67 (0x43))
+  // 1 byte length
+  // n bytes data
+  // 2 bytes crc
+
+  const length = data.readUInt8(2);
+  const contents = [];
+
+  for (var i = 0; i < length; i++) {
+      const reg = data.readUInt8(3 + i);
+      contents.push(reg);
+  }
+
+  if (next) {
+    next(null, { "data": contents, "buffer": data.slice(3, 3 + length) });
+  }
+}
+
+/**
  * Wrapper method for writing to a port with timeout. <code><b>[this]</b></code> has the context of ModbusRTU
  * @param {Buffer} buffer The data to send
  * @private
@@ -316,13 +343,13 @@ function _isExpectedLengthReachedFC3(data) {
 function _isExpectedLengthReachedFC16(data) {
     return data.length >= 8;
 }
-function _isExpectedLengthReachedFC67(data) {
+function _isExpectedLengthReachedFC68(data) {
     return data.length >= 5 + data.readUInt8(2);
 }
 const _isExpectedLengthReachedMap = {
     3: _isExpectedLengthReachedFC3,
     16: _isExpectedLengthReachedFC16,
-    67: _isExpectedLengthReachedFC67
+    68: _isExpectedLengthReachedFC68
 };
 
 function _isExpectedLengthReached(data) {
@@ -508,6 +535,10 @@ function _onReceive(receivedBuffer) {
         case 67:
             // Encapsulation for RFID
             _readFC67(data, next);
+            break;
+        case 68:
+            // Encapsulation for RFID with length
+            _readFC68(data, next);
             break;
     }
 }
@@ -1134,6 +1165,64 @@ ModbusRTU.prototype.writeFC43 = function(address, deviceIdCode, objectId, next) 
   // write buffer to serial port
   _writeBufferToPort.call(this, buf, this._port._transactionIdWrite);
 };
+
+/**
+ * Write a Modbus "Encapsulation for RFID with length" (FC=68) to serial port.
+ *
+ * @param {number} address the slave unit address.
+ * @param {[number, number]} command the command to execute.
+ * @param {Array} array the array of data values for command.
+ * @param {Function} next the function to call next.
+ */
+ ModbusRTU.prototype.writeFC68 = function(address, command, array, next) {
+   // check port is actually open before attempting write
+    if (this.isOpen !== true) {
+        if (next) next(new PortNotOpenError());
+        return;
+    }
+  
+    // sanity check
+    if (typeof address === "undefined" || typeof command === "undefined") {
+        if (next) next(new BadAddressError());
+        return;
+    }
+  
+    const code = 68;
+  
+    // set state variables
+    this._transactions[this._port._transactionIdWrite] = {
+        nextAddress: address,
+        nextCode: code,
+        lengthUnknown: true,
+        next: next
+    };
+  
+    const dataLength = array.length;
+  
+    const codeLength = 5 + dataLength;
+    const buf = Buffer.alloc(codeLength + 2); // add 2 crc bytes
+  
+    buf.writeUInt8(address, 0);
+    buf.writeUInt8(code, 1);
+    buf.writeUInt8(dataLength + 2, 2);
+    buf.writeUInt8(command[0], 3);
+    buf.writeUInt8(command[1], 4);
+  
+    // copy content of array to buf
+    if (Buffer.isBuffer(array)) {
+      array.copy(buf, 5);
+    } else {
+      for (let i = 0; i < dataLength; i++) {
+        buf.writeUInt8(array[i], 5 + i);
+      }
+    }
+  
+    // add crc bytes to buffer
+    buf.writeUInt16LE(crc16(buf.slice(0, -2)), codeLength);
+  
+    // write buffer to serial port
+    _writeBufferToPort.call(this, buf, this._port._transactionIdWrite);
+ }
 
 // add the connection shorthand API
 require("./apis/connection")(ModbusRTU);
