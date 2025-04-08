@@ -409,6 +409,12 @@ function _onReceive(receivedBuffer) {
         }
     };
 
+    // check if expected length reached or if we need to collect more data
+    if (!_isExpectedLengthReached(data)) {
+        // dont do anything, wait for more data
+        return;
+    }
+
     /* cancel the timeout */
     _cancelTimeout(transaction._timeoutHandle);
     transaction._timeoutHandle = undefined;
@@ -416,12 +422,6 @@ function _onReceive(receivedBuffer) {
     /* check if the timeout fired */
     if (transaction._timeoutFired === true) {
         // we have already called back with an error, so don't generate a new callback
-        return;
-    }
-
-    // check if expected length reached or if we need to collect more data
-    if (!_isExpectedLengthReached(data)) {
-        // dont do anything, wait for more data
         return;
     }
 
@@ -437,7 +437,7 @@ function _onReceive(receivedBuffer) {
     // if crc is OK, read address and function code
     const address = data.readUInt8(0);
     const code = data.readUInt8(1);
-    
+
     /* check message CRC
       * if CRC is bad raise an error
       */
