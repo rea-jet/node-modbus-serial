@@ -299,6 +299,9 @@ function _writeBufferToPort(buffer, transactionId) {
 
     modbusSerialDebug('send raw buffer', buffer)
     this._port.write(buffer);
+    this._port.flush(() => {
+      modbusSerialDebug('flush completed');
+    });
 }
 
 /**
@@ -403,6 +406,9 @@ function _onReceive(receivedBuffer) {
                     res.responses = transaction.responses;
                 }
             }
+
+            // clear transaction
+            // delete modbus._transactions[modbus._port._transactionIdRead];
 
             /* Pass the data on */
             return transaction.next(err, res);
