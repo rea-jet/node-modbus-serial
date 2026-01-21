@@ -301,6 +301,9 @@ function _writeBufferToPort(buffer, transactionId) {
     this._port.write(buffer);
     this._port.flush(() => {
       modbusSerialDebug('flush completed');
+      this._port.drain(() => {
+        modbusSerialDebug('drain completed');
+      })
     });
 }
 
